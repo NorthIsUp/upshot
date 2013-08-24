@@ -1,26 +1,18 @@
 #!/usr/bin/env python
-import glob
 import logging
 import os
-import shutil
-import sys
 import time
-import urllib
-import urlparse
 
 from AppKit import *
 from PyObjCTools import AppHelper
 
-from watchdog.events import (FileCreatedEvent, FileMovedEvent,
-                             FileSystemEventHandler)
+from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-import DropboxDetect
 import Preferences
 from lib import utils
 from lib.notifications import Growler
 from lib.windows import alert
-
 
 SCREENSHOT_DIR = utils.get_pref(
     domain='com.apple.screencapture', key='location',
@@ -58,35 +50,9 @@ class Upshot(NSObject):
     menuitems = {}  # Shortcut to our menuitems.
 
     def applicationDidFinishLaunching_(self, notification):
-        if not DROPBOX_DIR:  # Oh-oh.
-            alert('Unable to detect Dropbox folder',
-                  'UpShot requires Dropbox, for now. Please install it, then '
-                  'try again.', ['OK'])
-            self.quit_(self)
-
-        if not os.path.exists(PUBLIC_DIR):  # No public folder?
-            pressed = alert(
-                'Unable to detect Public Dropbox folder',
-                'UpShot requires a Dropbox Public folder. You seem to have '
-                'Dropbox, but no Public folder.\n\n'
-                'Since October 2012, Dropbox will only create a public '
-                'folder for you if you opt in to it.\n\n'
-                'Please do so before using UpShot.',
-                ['Learn How to Create a Dropbox Public Folder',
-                 'Quit UpShot'])
-            if pressed == NSAlertFirstButtonReturn:
-                # Open Dropboc opt-in
-                sw = NSWorkspace.sharedWorkspace()
-                sw.openURL_(NSURL.URLWithString_(DROPBOX_PUBLIC_INFO))
-            self.quit_(self)
-
         self.build_menu()
         # Go do something useful.
-        if utils.get_pref('dropboxid'):
-            self.startListening_()
-        else:
-            self.stopListening_()
-            DropboxDetect.DropboxDetectWindowController.showWindow()
+        self.startListening_()
 
     def build_menu(self):
         """Build the OS X status bar menu."""
@@ -126,22 +92,16 @@ class Upshot(NSObject):
         self.menuitems['stop'] = m
 
         m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Need to detect Dropbox ID. Open Preferences!", '', '')
-        m.setHidden_(True)  # We hopefully don't need this.
-        self.menu.addItem_(m)
-        self.menuitems['needpref'] = m
-
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             'Preferences...', 'openPreferences:', '')
         self.menu.addItem_(m)
         self.menuitems['preferences'] = m
 
         self.menu.addItem_(NSMenuItem.separatorItem())
 
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            'Open UpShot Project Website', 'website:', '')
-        self.menu.addItem_(m)
-        self.menuitems['website'] = m
+        # m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        #     'Open UpShot Project Website', 'website:', '')
+        # self.menu.addItem_(m)
+        # self.menuitems['website'] = m
 
         m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             'About UpShot', 'about:', '')
@@ -167,22 +127,12 @@ class Upshot(NSObject):
             utils.get_pref('iconset') == 'grayscale')
 
         running = (self.observer is not None)
-        self.statusitem.setImage_(self.images['icon16' if running else
-                                              'icon16-off'])
-
-        if utils.get_pref('dropboxid'):  # Runnable.
-            self.menuitems['stop'].setHidden_(not running)
-            self.menuitems['start'].setHidden_(running)
-            self.menuitems['needpref'].setHidden_(True)
-        else:  # Need settings.
-            self.menuitems['start'].setHidden_(True)
-            self.menuitems['stop'].setHidden_(True)
-            self.menuitems['needpref'].setHidden_(False)
+        self.statusitem.setImage_(self.images['icon16' if running else 'icon16-off'])
 
     def openShareDir_(self, sender=None):
         """Open the share directory in Finder."""
-        sw = NSWorkspace.sharedWorkspace()
-        sw.openFile_(SHARE_DIR)
+        import webbrowser
+        webbrowser.open('http://phabricator.local.disqus.net/file/', new=0, autoraise=True)
 
     def about_(self, sender=None):
         """Open standard About dialog."""
@@ -240,8 +190,7 @@ class ScreenshotHandler(FileSystemEventHandler):
     def on_created(self, event):
         """File creation, handles screen clips."""
         f = event.src_path
-        if isinstance(event, FileCreatedEvent) and not (
-            os.path.basename(f).startswith('.')):
+        if isinstance(event, FileCreatedEvent) and not (os.path.basename(f).startswith('.')):
             self.handle_screenshot_candidate(f)
 
     def on_moved(self, event):
@@ -264,39 +213,20 @@ class ScreenshotHandler(FileSystemEventHandler):
         if not utils.is_screenshot(f):
             return
 
-        # Create target dir if needed.
-        if not os.path.isdir(SHARE_DIR):
-            log.debug('Creating share dir %s' % SHARE_DIR)
-            os.makedirs(SHARE_DIR)
+        utils.get_pref('retinascale') and utils.resampleRetinaImage(f, f)
 
-        # Determine target filename in share directory.
-        log.debug('Moving %s to %s' % (f, SHARE_DIR))
-        if utils.get_pref('randomize'):  # Randomize file names?
-            ext = os.path.splitext(f)[1]
-            while True:
-                shared_name = utils.randname() + ext
-                target_file = os.path.join(SHARE_DIR, shared_name)
-                if not os.path.exists(target_file):
-                    log.debug('New file name is: %s' % shared_name)
-                    break
-        else:
-            shared_name = os.path.basename(f)
-            target_file = os.path.join(SHARE_DIR, shared_name)
+        with open(f, "rb") as image_file:
+            from lib.phabricator import Phabricator
 
-        # Move/copy file there.
-        if (utils.get_pref('retinascale') and
-            utils.resampleRetinaImage(f, target_file)):
-            if not utils.get_pref('copyonly'):
-                os.unlink(f)
-        else:
-            if utils.get_pref('copyonly'):
-                shutil.copy(f, target_file)
-            else:
-                shutil.move(f, target_file)
+            PHAB = Phabricator()  # This will use your ~/.arcrc file
 
-        # Create shared URL.
-        url = utils.share_url(urllib.quote(shared_name))
-        logging.debug('Share URL is %s' % url)
+            import base64
+            encoded_string = base64.b64encode(image_file.read())
+            result = PHAB.file.upload(data_base64=encoded_string)
+            phid = result.response
+            result = PHAB.file.info(phid=phid)
+            url = result['uri']
+            object_name = result['objectName']
 
         logging.debug('Copying to clipboard.')
         utils.pbcopy(url)
@@ -304,10 +234,13 @@ class ScreenshotHandler(FileSystemEventHandler):
         # Notify user.
         growl = Growler.alloc().init()
         growl.setCallback(self.notify_callback)
-        growl.notify('Screenshot shared!',
-                     'Your URL is: %s\n\n'
-                     'Click here to view file.' % url,
-                     context=target_file)
+        growl.notify(
+            'Screenshot shared!',
+            'Your URL is: %s\n'
+            'PHID is: %s\n'
+            'FILE is: %s\n'
+            'Click here to view file.' % (url, phid, object_name),
+            context=f)
 
     def notify_callback(self, filepath):
         """

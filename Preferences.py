@@ -2,7 +2,6 @@ import objc
 from Foundation import *
 from LaunchServices import *
 
-import DropboxDetect
 from lib.utils import detect_dropbox_folder, get_pref, set_pref, share_url
 from lib.windows import UpShotWindowController
 
@@ -110,12 +109,6 @@ class PreferencesWindowController(UpShotWindowController):
             self.url_example.setStringValue_(
                 share_url(EXAMPLE_FILENAME, url=self.url_text.stringValue()))
             set_pref('customurl', self.url_text.stringValue())
-
-    @objc.IBAction
-    def dropboxDetect_(self, sender):
-        """Open dropbox detection window."""
-        DropboxDetect.DropboxDetectWindowController.showWindow()
-        self.close()
 
     @objc.IBAction
     def domainHelp_(self, sender):

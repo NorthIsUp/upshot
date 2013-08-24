@@ -11,7 +11,7 @@ from AppKit import *
 
 
 CHARS = string.ascii_letters + string.digits
-DEFAULT_SHARE_URL = 'http://dl.dropboxusercontent.com/u/{dropboxid}/Screenshots/'
+DEFAULT_SHARE_URL = 'http://phabricator.local.disqus.net/file/info/'
 
 
 def autopooled(f):
