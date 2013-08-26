@@ -2,20 +2,18 @@ import objc
 from Foundation import *
 from LaunchServices import *
 
-from lib.utils import detect_dropbox_folder, get_pref, set_pref, share_url
+from lib.utils import get_pref, set_pref
 from lib.windows import UpShotWindowController
 
 
 DEFAULTS = {
     'launchAtStartup': True,
     'iconset': 'default',  # Which status bar icon? 'default' or 'grayscale'
-    'randomize': True,  # Randomize screenshot names?
     'copyonly': False,  # Copy (don't move) screen shots.
     'retinascale': False,  # Scale upscaled retina images to low DPI automatically.
-    'customurl': '',  # Empty string means: default Dropbox URL.
+    'share_format': 'long',  # Empty string means: default Dropbox URL.
 }
-DOMAIN_HELP_URL = ('http://fredericiana.com/2012/12/09/'
-                   'custom-domain-with-dropbox/')
+DOMAIN_HELP_URL = ('http://fredericiana.com/2012/12/09/custom-domain-with-dropbox/')
 EXAMPLE_FILENAME = 'hZr9.png'
 
 
@@ -27,18 +25,11 @@ class PreferencesWindowController(UpShotWindowController):
     iconset = objc.IBOutlet()
 
     # Screenshots
-    randomize = objc.IBOutlet()
     copyonly = objc.IBOutlet()
     retinascale = objc.IBOutlet()
 
-    # Dropbox metadata
-    dropboxdir = objc.IBOutlet()
-    dropboxid = objc.IBOutlet()
-
     # Custom share URLs
     url_select = objc.IBOutlet()
-    url_text = objc.IBOutlet()
-    url_example = objc.IBOutlet()
 
     def showWindow_(self, sender):
         super(PreferencesWindowController, self).showWindow_(sender)
@@ -47,31 +38,16 @@ class PreferencesWindowController(UpShotWindowController):
     def updateDisplay(self):
         """Update window display from settings."""
         self.launchAtStartup.setState_(get_pref('launchAtStartup'))
-        self.iconset.selectCellWithTag_(
-            1 if get_pref('iconset') == 'grayscale' else 0)
+        self.iconset.selectCellWithTag_(1 if get_pref('iconset') == 'grayscale' else 0)
 
-        self.randomize.setState_(get_pref('randomize'))
         self.copyonly.setState_(get_pref('copyonly'))
         self.copyonly.setState_(get_pref('retinascale'))
 
-        dropboxdir = detect_dropbox_folder()
-        self.dropboxdir.setStringValue_(
-            dropboxdir or u'None. Install Dropbox?')
-        self.dropboxid.setStringValue_(get_pref('dropboxid'))
-
-        customurl = get_pref('customurl')
-        if not customurl:  # Default.
+        share_format = get_pref('share_format')
+        if share_format == 'long':  # Default.
             self.url_select.selectCellWithTag_(0)
-            self.url_text.setEnabled_(False)
-            self.url_text.setStringValue_('')
-            self.url_example.setStringValue_(share_url(EXAMPLE_FILENAME,
-                                                       url=''))
-        else:  # Custom.
+        elif share_format == 'short':  # Custom.
             self.url_select.selectCellWithTag_(1)
-            self.url_text.setEnabled_(True)
-            self.url_text.setStringValue_(customurl)
-            self.url_example.setStringValue_(share_url(EXAMPLE_FILENAME,
-                                                       url=customurl))
 
     @objc.IBAction
     def saveSettings_(self, sender):
@@ -88,27 +64,14 @@ class PreferencesWindowController(UpShotWindowController):
         upshot = NSApplication.sharedApplication().delegate()
         upshot.update_menu()
 
-        set_pref('randomize', bool(self.randomize.state()))
         set_pref('copyonly', bool(self.copyonly.state()))
         set_pref('retinascale', bool(self.retinascale.state()))
 
-        try:
-            set_pref('dropboxid', int(self.dropboxid.stringValue()))
-        except ValueError:
-            pass
-
         # Custom URL settings.
         if self.url_select.selectedCell().tag() == 0:  # Default
-            self.url_text.setStringValue_('')
-            self.url_text.setEnabled_(False)
-            self.url_example.setStringValue_(share_url(EXAMPLE_FILENAME,
-                                                       url=''))
-            set_pref('customurl', '')
-        else:  # Custom
-            self.url_text.setEnabled_(True)
-            self.url_example.setStringValue_(
-                share_url(EXAMPLE_FILENAME, url=self.url_text.stringValue()))
-            set_pref('customurl', self.url_text.stringValue())
+            set_pref('share_format', 'long')
+        elif self.url_select.selectedCell().tag() == 1:  # Custom
+            set_pref('share_format', 'short')
 
     @objc.IBAction
     def domainHelp_(self, sender):

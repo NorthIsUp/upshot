@@ -16,7 +16,9 @@ from lib.windows import alert
 
 SCREENSHOT_DIR = utils.get_pref(
     domain='com.apple.screencapture', key='location',
-    default=os.path.join(os.environ['HOME'], 'Desktop'))
+    default=os.path.join(os.environ['HOME'], 'Desktop')
+)
+
 DROPBOX_DIR = utils.detect_dropbox_folder()
 PUBLIC_DIR = os.path.join(DROPBOX_DIR or '', 'Public')
 SHARE_DIR = os.path.join(PUBLIC_DIR, 'Screenshots')
@@ -63,8 +65,7 @@ class Upshot(NSObject):
         # Set statusbar icon and color/grayscale mode.
         for tag, img in self.image_paths.items():
             self.images[tag] = NSImage.alloc().initByReferencingFile_(img)
-            self.images[tag].setTemplate_(
-                utils.get_pref('iconset') == 'grayscale')
+            self.images[tag].setTemplate_(utils.get_pref('iconset') == 'grayscale')
         self.statusitem.setImage_(self.images['icon16'])
 
         self.statusitem.setHighlightMode_(1)
@@ -73,26 +74,22 @@ class Upshot(NSObject):
         # Build menu.
         self.menu = NSMenu.alloc().init()
 
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            'Browse Screenshots', 'openShareDir:', '')
+        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('Browse Screenshots', 'openShareDir:', '')
         self.menu.addItem_(m)
         self.menuitems['opensharedir'] = m
 
         self.menu.addItem_(NSMenuItem.separatorItem())
 
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            'Start Screenshot Sharing', 'startListening:', '')
+        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('Start Screenshot Sharing', 'startListening:', '')
         m.setHidden_(True)  # Sharing is on by default.
         self.menu.addItem_(m)
         self.menuitems['start'] = m
 
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            'Pause Screenshot Sharing', 'stopListening:', '')
+        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('Pause Screenshot Sharing', 'stopListening:', '')
         self.menu.addItem_(m)
         self.menuitems['stop'] = m
 
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            'Preferences...', 'openPreferences:', '')
+        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('Preferences...', 'openPreferences:', '')
         self.menu.addItem_(m)
         self.menuitems['preferences'] = m
 
@@ -103,15 +100,13 @@ class Upshot(NSObject):
         # self.menu.addItem_(m)
         # self.menuitems['website'] = m
 
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            'About UpShot', 'about:', '')
+        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('About UpShot', 'about:', '')
         self.menu.addItem_(m)
         self.menuitems['about'] = m
 
         self.menu.addItem_(NSMenuItem.separatorItem())
 
-        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            'Quit UpShot', 'quit:', '')
+        m = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('Quit UpShot', 'quit:', '')
         self.menu.addItem_(m)
         self.menuitems['quit'] = m
 
@@ -155,8 +150,7 @@ class Upshot(NSObject):
         self.observer.schedule(event_handler, path=SCREENSHOT_DIR)
         self.observer.start()
         self.update_menu()
-        log.debug('Listening for screen shots to be added to: %s' % (
-                  SCREENSHOT_DIR))
+        log.debug('Listening for screen shots to be added to: %s' % (SCREENSHOT_DIR))
 
         growl = Growler.alloc().init()
         growl.notify('UpShot started', 'and listening for screenshots!')
@@ -228,27 +222,29 @@ class ScreenshotHandler(FileSystemEventHandler):
             url = result['uri']
             object_name = result['objectName']
 
+        if utils.get_pref('share_format') == 'long':
+            share_url = url
+        elif utils.get_pref('share_format') == 'short':
+            share_url = object_name
+
         logging.debug('Copying to clipboard.')
-        utils.pbcopy(url)
+        utils.pbcopy(share_url)
 
         # Notify user.
         growl = Growler.alloc().init()
         growl.setCallback(self.notify_callback)
         growl.notify(
             'Screenshot shared!',
-            'Your URL is: %s\n'
-            'PHID is: %s\n'
-            'FILE is: %s\n'
-            'Click here to view file.' % (url, phid, object_name),
-            context=f)
+            '{%s}@%s\n' % (object_name, url),
+            context=url
+        )
 
     def notify_callback(self, filepath):
         """
         When growl notification is clicked, open Finder with shared file.
         """
         ws = NSWorkspace.sharedWorkspace()
-        ws.activateFileViewerSelectingURLs_(
-            NSArray.arrayWithObject_(NSURL.fileURLWithPath_(filepath)))
+        ws.activateFileViewerSelectingURLs_(NSArray.arrayWithObject_(NSURL.fileURLWithPath_(filepath)))
 
 
 if __name__ == '__main__':
